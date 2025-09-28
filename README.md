@@ -130,5 +130,12 @@ conclusion) and injects the CSV artifacts into tables using `pgfplotstable` help
 
 ## License and citation
 
-The final repository will be released under a permissive license (MIT or BSD). Add the
-license of choice before publishing and cite the arXiv preprint once available.
+This project is released under the [MIT License](LICENSE). Please cite the forthcoming
+arXiv preprint once it is available; a `CITATION.cff` file will be published alongside
+the preprint metadata.
+
+## AI-assisted development
+
+Portions of the codebase and documentation were produced with the help of AI coding
+assistants. All generated content was reviewed, tested, and adapted by the author
+prior to release.
