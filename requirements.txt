@@ -1,0 +1,10 @@
+# Core numerical stack
+numpy>=1.21
+scipy>=1.8
+scikit-learn>=1.0
+nibabel>=5.0
+numba>=0.57
+
+# Landmark selection backends
+hnswlib>=0.6
+faiss-cpu>=1.7

@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+.env/
+.pyenv/
+.conda/
+
+# Package build directories
+build/
+dist/
+*.egg-info/
+
+# Local data caches
+.DS_Store
+Thumbs.db
+
+# Experiment outputs
+artifacts/
+artifacts/**
+
+# Raw datasets (retain manifests only)
+data/*.nii*
+data/*.mnc*
+data/*.npy
+data/IXI/
+data/**/*.nii*
+data/**/*.mnc*
+data/**/*.npy
+
+# Development caches and reports
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+coverage.xml
+htmlcov/
+*.log
+*.tmp
+*.bak
+*.orig
+*.swp
+*.swo
+
+# Secrets scanner baseline (local only)
+.secrets.baseline
+
+# VS Code
+.vscode/
+
+# Paper
+paper/
