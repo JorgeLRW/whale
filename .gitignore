@@ -22,14 +22,12 @@ Thumbs.db
 artifacts/
 artifacts/**
 
-# Raw datasets (retain manifests only)
-data/*.nii*
-data/*.mnc*
-data/*.npy
-data/IXI/
-data/**/*.nii*
-data/**/*.mnc*
-data/**/*.npy
+# Raw datasets (retain manifests/scripts only)
+data/**
+!data/README.md
+!data/real_dataset_manifest.md
+!data/fetch_real_point_clouds.py
+!data/.gitkeep
 
 # Development caches and reports
 .pytest_cache/

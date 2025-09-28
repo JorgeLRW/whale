@@ -1,0 +1,122 @@
+# MRI Deep-Dive Example Configurations
+
+Below are six reference runs that exercise both the standard and fast MRI deep-dive
+pipelines. Commands are written for PowerShell and assume the repository root is the
+current working directory with `PYTHONPATH` already pointing at `src`.
+
+---
+
+1. Standard deep dive – BrainWeb T1 (coverage-oriented)
+   - Dataset: `data/t1_icbm_normal_1mm_pn3_rf20.nii.gz`
+   - Command:
+     python -m paper_ready.mri_deep_dive `
+       --input data/t1_icbm_normal_1mm_pn3_rf20.nii.gz `
+       --dataset-label brainweb_t1_standard `
+       --methods hybrid `
+       --m 600 `
+       --mask-percentile 97.5 `
+       --selection-c 4 `
+       --k-witness 8 `
+       --max-points 90000 `
+       --coverage-radius 0.03 `
+       --rips-points 0 `
+       --out examples/sample_outputs/brainweb_t1_standard.csv
+
+2. Standard deep dive – IXI subject (topology-oriented)
+   - Dataset: `data/IXI/IXI050-Guys-0711-T1.nii.gz`
+   - Command:
+     python -m paper_ready.mri_deep_dive `
+       --input data/IXI/IXI050-Guys-0711-T1.nii.gz `
+       --dataset-label ixi_t1_full `
+       --methods random,hybrid `
+       --m 650 `
+       --mask-percentile 98.0 `
+       --selection-c 5 `
+       --k-witness 8 `
+       --max-points 110000 `
+       --coverage-radius 0.028 `
+       --rips-points 0 `
+       --out examples/sample_outputs/ixi_t1_full.csv
+
+3. Fast deep dive – IXI tuned configuration
+   - Dataset: `data/IXI/IXI050-Guys-0711-T1.nii.gz`
+   - Command:
+     python -m paper_ready.mri_deep_dive_fast `
+       --input data/IXI/IXI050-Guys-0711-T1.nii.gz `
+       --dataset-label ixi_t1_fast_opt `
+       --methods hybrid `
+       --m 900 `
+       --mask-percentile 98.5 `
+       --thin-ratio 0.9 `
+       --softclip-percentile 99.8 `
+       --selection-c 3 `
+       --k-witness 5 `
+       --max-points 130000 `
+       --coverage-radius 0.03 `
+       --out examples/sample_outputs/ixi_t1_fast_opt.csv
+
+4. Fast deep dive – BrainWeb quick sanity check
+   - Dataset: `data/t1_icbm_normal_1mm_pn3_rf20.nii.gz`
+   - Command:
+     python -m paper_ready.mri_deep_dive_fast `
+       --input data/t1_icbm_normal_1mm_pn3_rf20.nii.gz `
+       --dataset-label brainweb_t1_fast `
+       --methods hybrid `
+       --m 500 `
+       --mask-percentile 98.0 `
+       --thin-ratio 0.85 `
+       --softclip-percentile 99.6 `
+       --selection-c 3 `
+       --k-witness 5 `
+       --max-points 95000 `
+       --coverage-radius 0.029 `
+       --out examples/sample_outputs/brainweb_t1_fast.csv
+
+5. Fast deep dive – Synthetic phantom smoke test
+   - Dataset: generated via `--synthetic`
+   - Command:
+     python -m paper_ready.mri_deep_dive_fast `
+       --synthetic `
+       --dataset-label synthetic_fast_demo `
+       --seed 123 `
+       --methods hybrid `
+       --m 400 `
+       --mask-percentile 97.0 `
+       --thin-ratio 0.9 `
+       --softclip-percentile 99.5 `
+       --selection-c 3 `
+       --k-witness 4 `
+       --max-points 80000 `
+       --min-points 10000 `
+       --coverage-radius 0.03 `
+       --out examples/sample_outputs/synthetic_fast_demo.csv
+
+6. Fast deep dive – IXI002 high-density landmarks
+   - Dataset: `data/IXI/IXI002-Guys-0828-T1.nii.gz`
+   - Command:
+     python -m paper_ready.mri_deep_dive_fast `
+       --input data/IXI/IXI002-Guys-0828-T1.nii.gz `
+       --dataset-label ixi002_guys_0828_m5k `
+       --methods hybrid `
+       --m 5000 `
+       --mask-percentile 98.5 `
+       --thin-ratio 0.95 `
+       --softclip-percentile 99.8 `
+       --selection-c 3 `
+       --k-witness 5 `
+       --max-points 1000000 `
+       --coverage-radius 0.03 `
+       --rips-points 0 `
+       --out examples/sample_outputs/ixi002_guys_0828_m5k.csv
+
+7. Generic point clouds – Swiss roll / torus / Gaussian mixtures
+   - Dataset: built-in synthetic clouds (no external files required)
+   - Command:
+     $env:PYTHONPATH = "${PWD}\src"
+     python examples/run_pointcloud_benchmark.py `
+       --output-dir examples/sample_outputs
+
+---
+
+All outputs land under `examples/sample_outputs/`. Re-run any recipe to recreate the
+CSV before sharing results or modifying parameters.
