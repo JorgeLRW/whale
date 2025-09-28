@@ -1,4 +1,4 @@
-# Paper-Ready MRI Witness Pipeline
+# MRI Witness Pipeline
 
 This folder contains the curated code, results, and manuscript assets that accompany the
 upcoming arXiv submission on fast landmark-based witness persistence for MRI volumes.
@@ -61,6 +61,7 @@ python -m paper_ready.mri_deep_dive_fast `
 ```
 
 > **Note**
+>
 > - Gudhi is optional. If installed, you can enable Vietoris–Rips references by
 >   setting `--rips-points` and the pipeline will automatically compute bottleneck distances.
 > - The hybrid sampler also benefits from `hnswlib` or `faiss-cpu`; both are optional
