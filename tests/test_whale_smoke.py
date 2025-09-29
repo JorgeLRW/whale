@@ -17,7 +17,7 @@ from whale.mri import deep_dive, deep_dive_fast
 
 class WhaleMriSmokeTests(unittest.TestCase):
     def test_standard_deep_dive_synthetic_run(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="whale-mri-standard-") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="whale-standard-") as tmpdir:
             output_path = Path(tmpdir) / "standard.csv"
             parser = deep_dive.build_parser()
             args = parser.parse_args(
@@ -50,7 +50,7 @@ class WhaleMriSmokeTests(unittest.TestCase):
             self.assertEqual(csv_rows[0]["method"], "random")
 
     def test_fast_deep_dive_synthetic_run(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="whale-mri-fast-") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="whale-fast-") as tmpdir:
             output_path = Path(tmpdir) / "fast.csv"
             parser = deep_dive_fast.build_parser()
             args = parser.parse_args(

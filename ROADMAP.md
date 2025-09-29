@@ -4,7 +4,7 @@
 
 - **ArXiv paper polish**: incorporate reviewer feedback, regenerate figures, and ship a camera-ready PDF.
 - **Notebook refresh**: add parameter exploration widgets to the Colab demo and include the point-cloud benchmark workflow.
-- **Packaging polish**: publish the `whale-mri` package to TestPyPI, gather install feedback, then promote to PyPI.
+- **Packaging polish**: publish the `whale` package to TestPyPI, gather install feedback, then promote to PyPI.
 
 ## 0.3
 

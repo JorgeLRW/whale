@@ -3,11 +3,11 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "whale-mri"
+name = "whale"
 version = "0.1.0"
 description = "Fast landmark-based witness persistence for MRI volumes and point clouds."
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "MIT"
 requires-python = ">=3.9"
 authors = [
   {name = "Jorge Ruiz Williams", email = "jorgeruizwilliams@gmail.com"}
@@ -16,7 +16,6 @@ keywords = ["topological-data-analysis", "persistent-homology", "mri", "landmark
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
@@ -46,6 +45,12 @@ dev = [
 docs = [
   "mkdocs-material"
 ]
+
+[project.urls]
+Homepage = "https://github.com/JorgeLRW/whale"
+Documentation = "https://github.com/JorgeLRW/whale#readme"
+Issues = "https://github.com/JorgeLRW/whale/issues"
+Source = "https://github.com/JorgeLRW/whale"
 
 [project.scripts]
 whale-deep-dive = "whale.mri.deep_dive:main"

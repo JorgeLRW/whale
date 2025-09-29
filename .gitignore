@@ -46,6 +46,10 @@ htmlcov/
 
 # Secrets scanner baseline (local only)
 .secrets.baseline
+.pypirc
+
+# Local package manager credentials
+*.pypirc
 
 # VS Code
 .vscode/

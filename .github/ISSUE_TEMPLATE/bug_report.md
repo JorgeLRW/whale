@@ -22,7 +22,7 @@ labels: bug
 
 - OS:
 - Python version:
-- Whale version (`pip show whale-mri`):
+- Whale version (`pip show whale`):
 - Install method (pip, docker, source):
 
 ## Additional context

@@ -72,7 +72,7 @@ Run the smoke suite on the synthetic MRI phantom to validate your environment:
 
 ```powershell
 cd paper_ready
-python -m unittest tests.test_whale_mri_smoke
+python -m unittest tests.test_whale_smoke
 ```
 
 Prefer the cloud? Launch the [Colab notebook](https://colab.research.google.com/github/jorgeLRW/whale/blob/main/examples/notebooks/synthetic_demo.ipynb) to clone the
@@ -159,10 +159,10 @@ The project ships a modern `pyproject.toml`. Until wheels are published to PyPI 
 ```powershell
 pip install build
 python -m build
-pip install dist/whale_mri-0.1.0-py3-none-any.whl
+pip install dist/whale-0.1.0-py3-none-any.whl
 ```
 
-After publishing to PyPI the workflow simplifies to `pip install whale-mri`.
+After publishing to PyPI the workflow simplifies to `pip install whale`.
 
 The install exposes three console scripts:
 
