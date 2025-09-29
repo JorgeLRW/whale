@@ -1,0 +1,18 @@
+# Image tuned for the fast hybrid pipeline entry point
+FROM python:3.11-slim-bookworm
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /opt/whale
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+
+RUN pip install --upgrade pip \
+    && pip install . \
+    && pip install gudhi==3.9.0 --no-cache-dir || true
+
+ENTRYPOINT ["whale-deep-dive-fast"]
+CMD ["--help"]

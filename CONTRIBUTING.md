@@ -47,10 +47,18 @@ changes, report issues, and share new benchmarks.
   default).
 - Describe reproduction steps in the PR description or in `analysis/` notes.
 
-## Releasing
+## Release process
 
-1. Update `CHANGELOG.md` (if present) and the version number.
-2. Tag the release (e.g., `v0.1.0`) after the CI workflow passes.
-3. Attach the compiled `paper/main.pdf` and curated CSV bundles to the GitHub release.
+The detailed cadence lives in [`MAINTAINERS.md`](MAINTAINERS.md). In short:
+
+1. Ensure `main` is green: run `python -m unittest discover -s tests` and confirm CI has passed.
+2. Update `CHANGELOG.md` under the “Unreleased” section and bump the version in `pyproject.toml`.
+3. Commit the release prep with a message like `chore: cut vX.Y.Z`.
+4. Tag the commit (`git tag vX.Y.Z`) and push tags (`git push origin --tags`).
+5. Build and publish artifacts:
+  - Python package: `python -m build` followed by `twine upload dist/*` (use TestPyPI first).
+  - Container images: see `docker/README.md` for build targets.
+6. Draft a GitHub Release referencing the changelog entry and attach the compiled `paper/main.pdf` plus any curated CSV bundles you want to highlight.
+7. Announce the release via Discussions (Announcements category) and any external channels listed in the README.
 
 We’re excited to see what you build—thanks for contributing!

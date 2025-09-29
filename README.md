@@ -146,6 +146,58 @@ latexmk -pdf main.tex
 The LaTeX template already contains skeleton sections (introduction, methods, results,
 conclusion) and injects the CSV artifacts into tables using `pgfplotstable` helpers.
 
+## Governance and roadmap
+
+- Maintainer responsibilities and release cadence live in [`MAINTAINERS.md`](MAINTAINERS.md).
+- Upcoming milestones and feature ideas are tracked in [`ROADMAP.md`](ROADMAP.md) and on the GitHub project board.
+- Release history follows [`CHANGELOG.md`](CHANGELOG.md) using the Keep a Changelog format.
+
+## Packaging and distribution
+
+The project ships a modern `pyproject.toml`. Until wheels are published to PyPI you can install locally:
+
+```powershell
+pip install build
+python -m build
+pip install dist/whale_mri-0.1.0-py3-none-any.whl
+```
+
+After publishing to PyPI the workflow simplifies to `pip install whale-mri`.
+
+The install exposes three console scripts:
+
+- `whale-deep-dive`
+- `whale-deep-dive-fast`
+- `whale-pointcloud`
+
+See [`pyproject.toml`](pyproject.toml) for optional extras (dev, docs) and run the smoke tests once the package is installed.
+
+## Containers
+
+Prefer containers over local Python? Build the images defined in [`docker/`](docker/):
+
+```powershell
+docker build -f docker/Dockerfile.whale -t whale .
+docker build -f docker/Dockerfile.fast -t whale-fast .
+```
+
+The short tags (`whale`, `whale-fast`) work locally without a namespace. Retag before pushing to a registry (for example `ghcr.io/jorgeLRW/whale:0.1.0`). More guidance lives in [`docker/README.md`](docker/README.md).
+
+> **Security note**
+> Even though the images inherit from `python:3.11-slim-bookworm`, scan them with `docker scout cves whale` before shipping production artifacts.
+
+## Community
+
+- Open questions and showcase results in the GitHub **Discussions** tab (Announcements, Q&A, Show & Tell).
+- Report bugs or feature requests via the issue templates.
+- Join the upcoming community chat (Discord invite will be posted in Discussions).
+
+## Compliance checklist
+
+- Review dataset licences in [`COMPLIANCE.md`](COMPLIANCE.md) and keep raw MRI volumes out of Git.
+- Track third-party package licences in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md); regenerate it with `pip-licenses` on every release.
+- Security reports can be sent privately to the maintainer email listed in `MAINTAINERS.md`.
+
 ## License and citation
 
 This project is released under the [MIT License](LICENSE). Please cite the forthcoming
