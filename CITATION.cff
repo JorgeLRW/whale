@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it using the metadata below.
+title: Fast Witness Persistence for MRI Volumes via Hybrid Landmarking
+abstract: "Whale is a reusable library for landmark-based witness persistence on MRI volumes and point clouds, accompanied by reproducible scripts and analysis."
+type: software
+repository-code: https://github.com/jorgeLRW/whale
+license: MIT
+version: 0.1.0
+date-released: 2025-09-28
+authors:
+  - family-names: Ruiz Williams
+    given-names: Jorge
+    affiliation: Independent Researcher
+    email: jorgeruizwilliams@gmail.com

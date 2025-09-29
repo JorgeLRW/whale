@@ -1,5 +1,11 @@
 # MRI Witness Pipeline
 
+Fast landmark-based persistence tooling for MRI volumes and point clouds, powered by the
+Whale library.
+
+[![Tests](https://github.com/jorgeLRW/whale/actions/workflows/tests.yml/badge.svg)](https://github.com/jorgeLRW/whale/actions/workflows/tests.yml)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jorgeLRW/whale/blob/main/examples/notebooks/synthetic_demo.ipynb)
+
 This folder contains the curated code, results, and manuscript assets that accompany the
 upcoming arXiv submission on fast landmark-based witness persistence for MRI volumes.
 It is self-contained so it can be open-sourced independently of the larger research
@@ -59,6 +65,18 @@ python -m paper_ready.mri_deep_dive_fast `
     --coverage-radius 0.03 `
     --out paper_ready/artifacts/ixi_t1_guys_0711_opt.csv
 ```
+
+## Try it in 60 seconds
+
+Run the smoke suite on the synthetic MRI phantom to validate your environment:
+
+```powershell
+cd paper_ready
+python -m unittest tests.test_whale_mri_smoke
+```
+
+Prefer the cloud? Launch the [Colab notebook](https://colab.research.google.com/github/jorgeLRW/whale/blob/main/examples/notebooks/synthetic_demo.ipynb) to clone the
+repository, install dependencies, and execute the synthetic benchmark end-to-end.
 
 > **Note**
 >
