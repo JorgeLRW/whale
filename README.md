@@ -159,10 +159,10 @@ The project ships a modern `pyproject.toml`. Until wheels are published to PyPI 
 ```powershell
 pip install build
 python -m build
-pip install dist/whale-0.1.0-py3-none-any.whl
+pip install dist/whale_tda-0.1.0-py3-none-any.whl
 ```
 
-After publishing to PyPI the workflow simplifies to `pip install whale`.
+After publishing to PyPI the workflow simplifies to `pip install whale-tda`.
 
 The install exposes three console scripts:
 

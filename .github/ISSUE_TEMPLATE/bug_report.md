@@ -22,7 +22,7 @@ labels: bug
 
 - OS:
 - Python version:
-- Whale version (`pip show whale`):
+- Whale version (`pip show whale-tda`):
 - Install method (pip, docker, source):
 
 ## Additional context

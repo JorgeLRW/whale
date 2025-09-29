@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "whale"
+name = "whale-tda"
 version = "0.1.0"
 description = "Fast landmark-based witness persistence for MRI volumes and point clouds."
 readme = "README.md"
