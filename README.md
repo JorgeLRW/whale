@@ -3,6 +3,7 @@
 Fast landmark-based persistence tooling for MRI volumes and point clouds, powered by the
 Whale library.
 
+[![PyPI](https://img.shields.io/pypi/v/whale-tda.svg)](https://pypi.org/project/whale-tda/)
 [![Tests](https://github.com/jorgeLRW/whale/actions/workflows/tests.yml/badge.svg)](https://github.com/jorgeLRW/whale/actions/workflows/tests.yml)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jorgeLRW/whale/blob/main/examples/notebooks/synthetic_demo.ipynb)
 
@@ -31,8 +32,10 @@ workspace.
 conda create -n mri-witness python=3.10 -y
 conda activate mri-witness
 
-# 2. Install runtime dependencies
+# 2. Install runtime dependencies (or grab the PyPI wheel)
 pip install -r paper_ready/requirements.txt
+# Alternatively, skip local requirements and install the published package
+pip install whale-tda
 
 # 3. Make the package importable for local development
 $env:PYTHONPATH = "${PWD}\paper_ready\src"
