@@ -9,6 +9,14 @@ All commands assume you run them from the repository root with
 these examples (`--rips-points 0` in the standard pipeline), keeping runtime
 lightweight.
 
+> **Auto-scaling landmarks**
+> Both `whale-deep-dive` variants now accept `--auto-m` plus tuning knobs
+> (`--auto-m-base`, `--auto-m-exponent`, `--auto-m-min`, `--auto-m-max`).
+> When enabled the pipelines pick $m = \text{base} \cdot n^{\text{exponent}}$
+> (clamped to the min/max range) using the final retained point count $n$.
+> The recipes below keep the previous fixed values, but you can swap any
+> `--m …` flag for `--auto-m` to scale landmarks with dataset size automatically.
+
 See `run_recipes.txt` for a plaintext copy of the commands.
 
 ## Standard BrainWeb configuration
@@ -62,7 +70,7 @@ See `run_recipes.txt` for a plaintext copy of the commands.
     --input data/IXI/IXI050-Guys-0711-T1.nii.gz `
     --dataset-label ixi_t1_fast_opt `
     --methods hybrid `
-    --m 900 `
+    --auto-m `
     --mask-percentile 98.5 `
     --thin-ratio 0.9 `
     --softclip-percentile 99.8 `

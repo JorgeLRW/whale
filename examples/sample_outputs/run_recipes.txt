@@ -4,6 +4,12 @@ Below are six reference runs that exercise both the standard and fast MRI deep-d
 pipelines. Commands are written for PowerShell and assume the repository root is the
 current working directory with `PYTHONPATH` already pointing at `src`.
 
+> Tip: both deep-dive entry points accept `--auto-m` plus tuning knobs
+> (`--auto-m-base`, `--auto-m-exponent`, `--auto-m-min`, `--auto-m-max`). When
+> enabled they set $m = \text{base} \cdot n^{\text{exponent}}$ (clamped to the
+> provided min/max) using the final retained point count $n$. Swap any `--m …`
+> flag below for `--auto-m` to scale landmark budgets automatically.
+
 ---
 
 1. Standard deep dive – BrainWeb T1 (coverage-oriented)
@@ -45,7 +51,7 @@ current working directory with `PYTHONPATH` already pointing at `src`.
        --input data/IXI/IXI050-Guys-0711-T1.nii.gz `
        --dataset-label ixi_t1_fast_opt `
        --methods hybrid `
-       --m 900 `
+       --auto-m `
        --mask-percentile 98.5 `
        --thin-ratio 0.9 `
        --softclip-percentile 99.8 `
@@ -80,7 +86,7 @@ current working directory with `PYTHONPATH` already pointing at `src`.
        --dataset-label synthetic_fast_demo `
        --seed 123 `
        --methods hybrid `
-       --m 400 `
+       --auto-m `
        --mask-percentile 97.0 `
        --thin-ratio 0.9 `
        --softclip-percentile 99.5 `

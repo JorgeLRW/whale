@@ -21,7 +21,11 @@ Because the tags are short (`whale`, `whale-fast`), you can run them without a n
 
 ```powershell
 docker run --rm whale --synthetic --methods random --max-points 2000
-docker run --rm whale-fast --synthetic --methods hybrid --m 900 --max-points 60000
+docker run --rm whale-fast --synthetic --methods hybrid --auto-m --max-points 60000
+
+> Need a fixed landmark count instead? Replace `--auto-m` with an explicit
+> `--m …`. You can also tune the scaling via `--auto-m-base`,
+> `--auto-m-exponent`, `--auto-m-min`, and `--auto-m-max`.
 ```
 
 ## Publishing to a registry

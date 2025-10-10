@@ -41,7 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-points", type=int, default=80_000, help="Maximum number of points sampled from the volume.")
     parser.add_argument("--seed", type=int, default=0, help="Base random seed.")
     parser.add_argument("--methods", type=str, default="random,hybrid", help="Comma-separated landmark methods to evaluate.")
-    parser.add_argument("--m", type=int, default=600, help="Number of landmarks per method.")
+    parser.add_argument("--m", type=int, default=600, help="Number of landmarks per method (overridden by --auto-m).")
+    parser.add_argument("--auto-m", action="store_true", help="Scale landmark count based on the number of retained points.")
+    parser.add_argument("--auto-m-base", type=float, default=41.0, help="Coefficient in m = base * n^exponent when --auto-m is enabled.")
+    parser.add_argument("--auto-m-exponent", type=float, default=0.27, help="Exponent in m = base * n^exponent when --auto-m is enabled.")
+    parser.add_argument("--auto-m-min", type=int, default=400, help="Minimum landmarks when --auto-m is enabled.")
+    parser.add_argument("--auto-m-max", type=int, default=2400, help="Maximum landmarks when --auto-m is enabled (<=0 disables the cap).")
     parser.add_argument("--selection-c", type=int, default=4, help="Density sampler parameter (if used).")
     parser.add_argument("--hybrid-alpha", type=float, default=0.5, help="Alpha parameter for the hybrid sampler.")
     parser.add_argument("--k-witness", type=int, default=8, help="Number of witnesses per simplex for witness complex.")
@@ -55,6 +60,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 def add_result_row(rows: List[Dict[str, object]], base: Dict[str, object]) -> None:
     rows.append(base)
+
+
+def compute_scaled_landmarks(
+    n_points: int,
+    *,
+    base: float,
+    exponent: float,
+    min_landmarks: int,
+    max_landmarks: Optional[int],
+) -> int:
+    if n_points <= 0:
+        return max(1, min_landmarks)
+    raw = max(min_landmarks, int(round(base * (n_points ** exponent))))
+    if max_landmarks is not None and max_landmarks > 0:
+        raw = min(max_landmarks, raw)
+    return int(raw)
 
 
 def _prepare_volume(args: argparse.Namespace) -> tuple[PointCloud, str]:
@@ -89,6 +110,20 @@ def _prepare_volume(args: argparse.Namespace) -> tuple[PointCloud, str]:
 
 def run(args: argparse.Namespace) -> List[Dict[str, object]]:
     point_cloud, dataset_label = _prepare_volume(args)
+
+    if getattr(args, "auto_m", False):
+        auto_m = compute_scaled_landmarks(
+            point_cloud.points.shape[0],
+            base=args.auto_m_base,
+            exponent=args.auto_m_exponent,
+            min_landmarks=args.auto_m_min,
+            max_landmarks=args.auto_m_max if args.auto_m_max > 0 else None,
+        )
+        print(
+            f"[auto-m] total_points={point_cloud.points.shape[0]:,} -> m={auto_m} "
+            f"(base={args.auto_m_base}, exponent={args.auto_m_exponent})"
+        )
+        args.m = auto_m
 
     methods = parse_methods(args.methods)
     results: List[Dict[str, object]] = []

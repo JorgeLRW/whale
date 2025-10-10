@@ -11,6 +11,14 @@ All public objects are re-exported at the package root for convenience::
 
 """
 
+from .ai import (
+    WitnessFeatureLayer,
+    WitnessSummary,
+    batch_embeddings_to_point_clouds,
+    batch_witness_summaries,
+    embedding_to_point_cloud,
+    embedding_witness_summary,
+)
 from .pointcloud import PointCloud
 from .io import (
     ensure_nibabel_for_real_data,
@@ -33,6 +41,10 @@ from .pipeline import (
 
 __all__ = [
     "PointCloud",
+    "WitnessFeatureLayer",
+    "WitnessSummary",
+    "batch_embeddings_to_point_clouds",
+    "batch_witness_summaries",
     "ensure_nibabel_for_real_data",
     "generate_synthetic_volume",
     "load_mri_volume",
@@ -47,4 +59,6 @@ __all__ = [
     "parse_methods",
     "prepare_rips_reference",
     "select_landmarks",
+    "embedding_to_point_cloud",
+    "embedding_witness_summary",
 ]

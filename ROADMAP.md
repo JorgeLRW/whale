@@ -1,13 +1,18 @@
 # Whale Roadmap
 
-## 0.2 (Next minor release)
+## 0.2 (Shipped 2025-10-09)
 
-- **ArXiv paper polish**: incorporate reviewer feedback, regenerate figures, and ship a camera-ready PDF.
+- **AI-ready persistence summaries**: delivered `whale.ai` helpers and toggleable fast/regular witness workflows.
+- **Package polish**: prepped the 0.2.0 PyPI release and documented the AI optional extra.
+- **Repository tidy**: archived legacy workspaces while keeping artifacts accessible.
+
+## 0.3 (Next minor release)
+
 - **Notebook refresh**: add parameter exploration widgets to the Colab demo and include the point-cloud benchmark workflow.
-- **Packaging polish**: publish the `whale-tda` package to TestPyPI, gather install feedback, then promote to PyPI.
 
-## 0.3
+## 0.4
 
+- **Packaging polish**: promote the `whale-tda` package to PyPI (post-TestPyPI validation) and collect install feedback.
 - **Performance profiling**: integrate optional GPU-accelerated nearest-neighbour search via FAISS/HNSWLib switches.
 - **CLI ergonomics**: add `whale` console entry point with subcommands for `deep-dive`, `fast`, and `pointcloud` flows.
 - **Dataset registry**: provide friendly manifests and helper scripts for additional public MRI datasets (ABIDE, OASIS).

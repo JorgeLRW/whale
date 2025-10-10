@@ -8,9 +8,8 @@ Whale library.
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jorgeLRW/whale/blob/main/examples/notebooks/synthetic_demo.ipynb)
 
 This folder contains the curated code, results, and manuscript assets that accompany the
-upcoming arXiv submission on fast landmark-based witness persistence for MRI volumes.
-It is self-contained so it can be open-sourced independently of the larger research
-workspace.
+arXiv preprint on fast landmark-based witness persistence for MRI volumes. It is
+self-contained so it can be open-sourced independently of the larger research workspace.
 
 ## Directory layout
 
@@ -48,7 +47,7 @@ python -m paper_ready.mri_deep_dive `
     --input paper_ready/data/t1_icbm_normal_1mm_pn3_rf20.nii.gz `
     --dataset-label brainweb_t1_icbm `
     --methods hybrid `
-    --m 600 `
+  --m 600 `
     --mask-percentile 97.5 `
     --max-points 90000 `
     --rips-points 0 `
@@ -61,12 +60,21 @@ python -m paper_ready.mri_deep_dive_fast `
     --mask-percentile 98.5 `
     --thin-ratio 0.9 `
     --softclip-percentile 99.8 `
-    --m 900 `
+  --auto-m `
     --selection-c 3 `
     --k-witness 5 `
     --max-points 130000 `
     --coverage-radius 0.03 `
     --out paper_ready/artifacts/ixi_t1_guys_0711_opt.csv
+
+> **Auto-scaling landmarks**
+> Both entry points accept `--auto-m` together with
+> `--auto-m-base`, `--auto-m-exponent`, `--auto-m-min`, and
+> `--auto-m-max`. The default formula uses
+> $m = \text{base} \cdot n^{\text{exponent}}$ with $n$ equal to the
+> final retained point count, clamped to the provided bounds. Swap any
+> explicit `--m …` flag above for `--auto-m` when you want landmark budgets
+> to adapt automatically to dataset size.
 ```
 
 ## Try it in 60 seconds
@@ -118,6 +126,19 @@ domains.
 > A concise glossary for the CSV columns (coverage metrics, intensity stats,
 > Vietoris–Rips fields, etc.) lives in `examples/sample_outputs/README.md` under
 > “Metric reference”. Extend it as you introduce new measurements.
+
+## AI-ready embeddings
+
+The `whale.ai` module streamlines integration with deep-learning workflows. Convert
+vision or language embeddings (NumPy arrays *or* PyTorch tensors) into Whale
+`PointCloud` objects, run witness persistence on each batch element, and obtain compact
+feature summaries suitable for downstream models. Optional utilities expose a
+`torch.nn.Module` that can be dropped into training loops so persistence statistics are
+available alongside conventional features. Switch between fast (dim-1, lightweight) and
+regular (dim-2 aware) modes by passing `tda_mode="fast"` or `tda_mode="regular"` to the
+helpers. Install the PyTorch extras via `pip install "whale-tda[ai]"` to enable the neural
+layer. See `tests/test_ai_integration.py` for a
+minimal example and the inline docstrings in `whale.ai` for configuration details.
 
 ## Reproducing the tables and plots
 
@@ -203,9 +224,10 @@ The short tags (`whale`, `whale-fast`) work locally without a namespace. Retag b
 
 ## License and citation
 
-This project is released under the [MIT License](LICENSE). Please cite the forthcoming
-arXiv preprint once it is available; a `CITATION.cff` file will be published alongside
-the preprint metadata.
+This project is released under the [MIT License](LICENSE). Please cite the arXiv
+preprint *Fast Witness Persistence for MRI Volumes via Hybrid Landmarking*
+(2025). A `CITATION.cff` file accompanies the repository with the full bibliographic
+entry.
 
 ## AI-assisted development
 

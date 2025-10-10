@@ -30,7 +30,7 @@ from whale.pipeline import (
 )
 from whale.pointcloud import PointCloud
 
-from .deep_dive import add_result_row
+from .deep_dive import add_result_row, compute_scaled_landmarks
 
 
 def _replace_point_cloud(
@@ -107,6 +107,20 @@ def run(args: argparse.Namespace) -> List[Dict[str, object]]:
     point_cloud = softclip_intensities(point_cloud, args.softclip_percentile)
     point_cloud = thin_point_cloud(point_cloud, args.thin_ratio, seed=args.seed + 101)
     ensure_min_points(point_cloud, args.min_points, dataset_label)
+
+    if getattr(args, "auto_m", False):
+        auto_m = compute_scaled_landmarks(
+            point_cloud.points.shape[0],
+            base=args.auto_m_base,
+            exponent=args.auto_m_exponent,
+            min_landmarks=args.auto_m_min,
+            max_landmarks=args.auto_m_max if args.auto_m_max > 0 else None,
+        )
+        print(
+            f"[auto-m] total_points={point_cloud.points.shape[0]:,} -> m={auto_m} "
+            f"(base={args.auto_m_base}, exponent={args.auto_m_exponent})"
+        )
+        args.m = auto_m
 
     methods = parse_methods(args.methods)
     results: List[Dict[str, object]] = []
@@ -220,7 +234,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-points", type=int, default=40_000, help="Minimum point count after thinning; abort if fewer.")
     parser.add_argument("--seed", type=int, default=0, help="Base random seed.")
     parser.add_argument("--methods", type=str, default="hybrid", help="Comma-separated landmark methods (default hybrid only).")
-    parser.add_argument("--m", type=int, default=800, help="Number of landmarks per method.")
+    parser.add_argument("--m", type=int, default=800, help="Number of landmarks per method (overridden by --auto-m).")
+    parser.add_argument("--auto-m", action="store_true", help="Scale landmark count based on the number of retained points.")
+    parser.add_argument("--auto-m-base", type=float, default=43.0, help="Coefficient in m = base * n^exponent when --auto-m is enabled.")
+    parser.add_argument("--auto-m-exponent", type=float, default=0.26, help="Exponent in m = base * n^exponent when --auto-m is enabled.")
+    parser.add_argument("--auto-m-min", type=int, default=500, help="Minimum landmarks when --auto-m is enabled.")
+    parser.add_argument("--auto-m-max", type=int, default=2200, help="Maximum landmarks when --auto-m is enabled (<=0 disables the cap).")
     parser.add_argument("--selection-c", type=int, default=3, help="Hybrid density oversampling factor.")
     parser.add_argument("--hybrid-alpha", type=float, default=0.4, help="Alpha parameter for hybrid sampler.")
     parser.add_argument("--k-witness", type=int, default=4, help="Witness count per simplex (smaller for speed).")
