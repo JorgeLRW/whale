@@ -1,6 +1,6 @@
-# MRI Witness Pipeline
+# Witness Pipeline
 
-Fast landmark-based persistence tooling for MRI volumes and point clouds, powered by the
+Fast landmark-based persistence tooling for point clouds and volumetric data, powered by the
 Whale library.
 
 [![PyPI](https://img.shields.io/pypi/v/whale-tda.svg)](https://pypi.org/project/whale-tda/)
@@ -8,8 +8,10 @@ Whale library.
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jorgeLRW/whale/blob/main/examples/notebooks/synthetic_demo.ipynb)
 
 This folder contains the curated code, results, and manuscript assets that accompany the
-arXiv preprint on fast landmark-based witness persistence for MRI volumes. It is
-self-contained so it can be open-sourced independently of the larger research workspace.
+arXiv preprint on fast landmark-based witness persistence. While our experiments used MRI
+scans as a testbed, the core pipeline is designed to work with generic point clouds and
+volumetric data. It is self-contained so it can be open-sourced independently of the larger
+research workspace.
 
 ## Directory layout
 
@@ -28,8 +30,8 @@ self-contained so it can be open-sourced independently of the larger research wo
 
 ```powershell
 # 1. Create a fresh virtual environment and activate it (example with conda)
-conda create -n mri-witness python=3.10 -y
-conda activate mri-witness
+conda create -n witness-env python=3.10 -y
+conda activate witness-env
 
 # 2. Install runtime dependencies (or grab the PyPI wheel)
 pip install -r paper_ready/requirements.txt
@@ -79,7 +81,7 @@ python -m paper_ready.mri_deep_dive_fast `
 
 ## Try it in 60 seconds
 
-Run the smoke suite on the synthetic MRI phantom to validate your environment:
+Run the smoke suite on the synthetic phantom to validate your environment:
 
 ```powershell
 cd paper_ready
@@ -118,7 +120,7 @@ python examples/run_pointcloud_benchmark.py `
   --output-dir paper_ready/examples/sample_outputs
 ```
 
-All generated CSVs mirror the schema used by the MRI pipelines, making it easy to
+All generated CSVs mirror the schema used by the pipelines, making it easy to
 compare coverage, timing, and (when Gudhi is installed) bottleneck distances across
 domains.
 
@@ -142,20 +144,20 @@ minimal example and the inline docstrings in `whale.ai` for configuration detail
 
 ## Reproducing the tables and plots
 
-1. Run the commands above (or supply your own MRI data with matching parameters).
+1. Run the commands above (or supply your own volumetric or point-cloud data with matching parameters).
 2. Inspect the resulting CSVs in `paper_ready/artifacts/`.
 3. Consult `analysis/mri_deep_dive_summary.md` for a curated narrative of the
    performance/coverage trade-offs.
 
 ## Dataset considerations
 
-- The IXI volumes are large and subject to their original license. The downloader script
-  saves archives under `paper_ready/data/IXI` and leaves extraction markers so repeated runs
-  are fast.
-- Synthetic and BrainWeb volumes referenced in the paper can be fetched from their public
-  sources. Place them under `paper_ready/data/` following the manifest.
-- `data/real_dataset_manifest.md` is the canonical place to document acquisition details,
-  voxel spacing, preprocessing, and commands for every subject used in the paper.
+ - Large volumetric datasets (like IXI) are subject to their original licenses. The downloader script
+   saves archives under `paper_ready/data/IXI` and leaves extraction markers so repeated runs
+   are fast.
+ - Synthetic example volumes and point clouds referenced in the experiments can be fetched from
+   their public sources. Place them under `paper_ready/data/` following the manifest.
+ - `data/real_dataset_manifest.md` is the canonical place to document dataset provenance, voxel spacing,
+   preprocessing, and commands for every subject used in the experiments.
 
 ## Manuscript workflow
 
@@ -224,10 +226,9 @@ The short tags (`whale`, `whale-fast`) work locally without a namespace. Retag b
 
 ## License and citation
 
-This project is released under the [MIT License](LICENSE). Please cite the arXiv
-preprint *Fast Witness Persistence for MRI Volumes via Hybrid Landmarking*
-(2025). A `CITATION.cff` file accompanies the repository with the full bibliographic
-entry.
+This project is released under the [MIT License](LICENSE). Please cite the arXiv preprint
+*Fast Witness Persistence via Hybrid Landmarking* (2025). A `CITATION.cff` file accompanies the
+repository with the full bibliographic entry.
 
 ## AI-assisted development
 
