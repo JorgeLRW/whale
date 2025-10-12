@@ -2,8 +2,58 @@
 
 This module provides helpers that turn high-dimensional embeddings (NumPy arrays or
 PyTorch tensors) into :class:`~whale.pointcloud.PointCloud` objects, compute witness
-persistence summaries, and optionally expose the results as differentiable torch layers
-for model training.
+persistence summaries, and expose the results as torch layers for feature extraction.
+
+**Important**: The witness persistence computation is performed in NumPy and is not
+differentiable. :class:`WitnessFeatureLayer` can be used for:
+
+- Feature extraction: embeddings → TDA features → classifier
+- Regularization terms (using ``.detach()``)
+
+You cannot backpropagate through the TDA computation to optimize embeddings for specific
+topological properties. This is a fundamental limitation of most TDA operations.
+
+**Usage Example**::
+
+    import torch.nn as nn
+    from whale.ai import WitnessFeatureLayer
+
+    class MyModel(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.encoder = nn.Linear(784, 128)
+            # TDA layer computes ~20-30 features depending on max_dim
+            self.tda_layer = WitnessFeatureLayer(
+                method="hybrid", m=100, tda_mode="fast", summary_keys=None
+            )
+            # Concatenate encoder output (128) with TDA features
+            self.classifier = nn.Linear(128 + 30, 10)  # adjust based on actual TDA feature count
+        
+        def forward(self, x):
+            embeddings = self.encoder(x)  # (batch, 128)
+            # WitnessFeatureLayer expects (batch, n_points, dim)
+            tda_features = self.tda_layer(embeddings.unsqueeze(1))  # (batch, num_tda_features)
+            combined = torch.cat([embeddings, tda_features], dim=-1)
+            return self.classifier(combined)
+
+**Performance Considerations**:
+
+Computing witness persistence on every forward pass can be slow during training. Consider:
+
+- **Precomputing features offline**: Use :func:`batch_witness_summaries` to generate
+  TDA features once and cache them.
+- **Periodic computation**: Only compute TDA features every N batches.
+- **Fast mode during training**: Use ``tda_mode="fast"`` (dim-1 only) for training and
+  ``tda_mode="regular"`` (dim-2 aware) for validation/testing.
+
+**Summary Key Handling**:
+
+:class:`WitnessFeatureLayer` infers feature names from the first forward pass if
+``summary_keys`` is not provided. Once inferred, the schema is locked. To avoid schema
+mismatches across batches, either:
+
+- Provide ``summary_keys`` explicitly in the constructor.
+- Ensure the first forward pass is representative of all subsequent inputs.
 """
 
 from __future__ import annotations
@@ -322,7 +372,48 @@ class WitnessSummary:
 if _TORCH_AVAILABLE:
 
     class WitnessFeatureLayer(nn.Module):  # type: ignore[misc]
-        """Torch layer that emits witness persistence summaries for each batch element."""
+        """Torch layer that emits witness persistence summaries for each batch element.
+        
+        **Non-Differentiability**: This layer computes witness persistence in NumPy and
+        returns detached tensors. Gradients do not flow through the TDA computation.
+        Use this layer for feature extraction or regularization (with ``.detach()``), not
+        for optimizing embeddings toward specific topological properties.
+        
+        **Summary Key Locking**: If ``summary_keys`` is ``None``, the layer infers feature
+        names from the first forward pass and locks the schema. Subsequent batches must
+        produce the same set of keys. To avoid schema mismatches, provide ``summary_keys``
+        explicitly or ensure the first forward pass is representative.
+        
+        **Performance**: Computing TDA on every forward pass can be slow. Consider:
+        
+        - Precomputing features offline with :func:`batch_witness_summaries`.
+        - Using ``tda_mode="fast"`` during training, ``tda_mode="regular"`` for validation.
+        - Computing features periodically (e.g., every N batches) instead of every step.
+        
+        Parameters
+        ----------
+        method : str, default="hybrid"
+            Landmark selection method: "hybrid", "density", "random", etc.
+        max_dim : int, optional
+            Maximum homology dimension. If ``None``, derived from ``tda_mode``.
+        k_witness : int, optional
+            Number of nearest landmarks for witness complex. If ``None``, derived from ``tda_mode``.
+        m : int, optional
+            Landmark budget. If ``None``, derived from ``tda_mode``.
+        selection_c : int, default=8
+            Parameter for landmark selection heuristics.
+        hybrid_alpha : float, default=0.35
+            Blending parameter for hybrid sampling.
+        coverage_radius : float, optional
+            Radius for coverage metrics. Defaults to adaptive heuristic if ``None``.
+        summary_keys : Sequence[str], optional
+            Explicit list of feature names. If ``None``, inferred from first forward pass.
+        dtype : torch.dtype, optional
+            Output tensor dtype. Defaults to ``torch.float32``.
+        tda_mode : str, default="auto"
+            TDA configuration preset: "auto" (same as "fast"), "fast" (dim-1, lightweight),
+            or "regular" (dim-2 aware).
+        """
 
         def __init__(
             self,
