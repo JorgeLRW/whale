@@ -1,29 +1,110 @@
-"""Witness complex persistence without relying on external TDA libraries."""
+"""Witness complex persistence without relying on external TDA libraries.
+
+This module now includes an optional GPU acceleration path for the dense
+pairwise distance computation required when constructing the witness complex.
+If PyTorch with CUDA support is available, the n×m distance matrix and k-NN
+queries are computed on the GPU and only the top-k results are materialised on
+the host. When CUDA is unavailable or a RuntimeError (e.g. OOM) occurs, the
+implementation gracefully falls back to the original NumPy code path.
+"""
 
 from itertools import combinations
 import math
 from typing import Dict
 
+import numpy as np
 
-def build_witness_complex(X, L_indices, max_dim=2, k_witness=8, max_filtration=None):
-    """Build witness complex simplices and their min-filtration values."""
-    import numpy as np
+try:  # Optional GPU acceleration via PyTorch if available
+    import torch
 
-    L = X[L_indices]
-    n, _ = X.shape
-    m = L.shape[0]
+    _HAS_TORCH = torch.cuda.is_available()
+except Exception:  # pragma: no cover - torch might not be installed
+    torch = None
+    _HAS_TORCH = False
 
+
+def _compute_knn_on_gpu(X: np.ndarray, L: np.ndarray, k: int):
+    """Compute k-NN indices/distances using torch on CUDA, if possible.
+
+    Returns ``(indices, distances)`` as numpy arrays or ``None`` if the GPU
+    path is unavailable (missing torch/torch.cuda) or raises a RuntimeError
+    such as CUDA OOM. Only the top-k neighbours per point are copied back to
+    host memory to minimise PCIe transfer overhead.
+    """
+
+    if not _HAS_TORCH:
+        return None
+
+    device = torch.device("cuda")
+
+    try:
+        X_t = torch.from_numpy(np.asarray(X, dtype=np.float32)).to(device)
+        L_t = torch.from_numpy(np.asarray(L, dtype=np.float32)).to(device)
+
+        # torch.cdist computes the full pairwise distance matrix efficiently on GPU.
+        dists = torch.cdist(X_t, L_t)
+        # Retrieve the smallest k distances (sorted ascending) and their indices.
+        neigh_dists, neigh_idx = torch.topk(
+            dists, k=k, dim=1, largest=False, sorted=True
+        )
+
+        # Move only the top-k subset back to CPU; this keeps transfer small.
+        return neigh_idx.cpu().numpy(), neigh_dists.cpu().numpy()
+    except RuntimeError:
+        # Likely CUDA out-of-memory; fall back to CPU implementation.
+        return None
+
+
+def _compute_knn_indices(X, L, k):
+    """Return (indices, distances) of the k nearest landmarks for each point."""
+
+    gpu_result = _compute_knn_on_gpu(X, L, k)
+    if gpu_result is not None:
+        return gpu_result
+
+    # CPU fallback mirrors the previous NumPy implementation.
     dists = np.linalg.norm(X[:, None, :] - L[None, :, :], axis=2)
-    k = min(k_witness, m)
     neigh_idx = np.argpartition(dists, kth=k - 1, axis=1)[:, :k]
     neigh_dists = np.take_along_axis(dists, neigh_idx, axis=1)
     order = np.argsort(neigh_dists, axis=1)
     neigh_idx = np.take_along_axis(neigh_idx, order, axis=1)
     neigh_dists = np.take_along_axis(neigh_dists, order, axis=1)
+    return neigh_idx, neigh_dists
+
+
+def build_witness_complex(X, L_indices, max_dim=2, k_witness=8, max_filtration=None, max_witnesses=10000):
+    """Build witness complex simplices and their min-filtration values.
+    
+    Args:
+        X: Point cloud (n×d array)
+        L_indices: Landmark indices
+        max_dim: Maximum simplex dimension
+        k_witness: Number of nearest landmarks per witness
+        max_filtration: Optional filtration cutoff
+        max_witnesses: Maximum number of witnesses to use (subsamples if n > max_witnesses).
+                      Using fewer witnesses dramatically speeds up simplex construction
+                      while preserving topological features. Default 10000.
+    """
+    L = X[L_indices]
+    n, _ = X.shape
+    m = L.shape[0]
+
+    # Subsample witnesses if too many (major speedup with minimal accuracy loss)
+    if n > max_witnesses:
+        witness_indices = np.random.RandomState(42).choice(n, size=max_witnesses, replace=False)
+        X_witnesses = X[witness_indices]
+    else:
+        witness_indices = np.arange(n)
+        X_witnesses = X
+
+    n_witnesses = len(witness_indices)
+
+    k = min(k_witness, m)
+    neigh_idx, neigh_dists = _compute_knn_indices(X_witnesses, L, k)
 
     simplex_filtration = {}
 
-    for wi in range(n):
+    for wi in range(n_witnesses):
         inds = neigh_idx[wi]
         ds = neigh_dists[wi]
         global_inds = [int(L_indices[int(i)]) for i in inds]
@@ -125,8 +206,19 @@ def compute_persistence_from_simplices(simplices, max_dim=2):
     return diagrams
 
 
-def compute_witness_persistence(X, L_indices, max_dim=2, k_witness=8, max_filtration=None):
-    simplices = build_witness_complex(X, L_indices, max_dim=max_dim, k_witness=k_witness, max_filtration=max_filtration)
+def compute_witness_persistence(X, L_indices, max_dim=2, k_witness=8, max_filtration=None, max_witnesses=10000):
+    """Compute witness complex persistence diagrams.
+    
+    Args:
+        X: Point cloud (n×d array)
+        L_indices: Landmark indices
+        max_dim: Maximum homology dimension
+        k_witness: Number of nearest landmarks per witness
+        max_filtration: Optional filtration cutoff
+        max_witnesses: Maximum witnesses to use (subsamples if needed for speed)
+    """
+    simplices = build_witness_complex(X, L_indices, max_dim=max_dim, k_witness=k_witness, 
+                                     max_filtration=max_filtration, max_witnesses=max_witnesses)
     diagrams = compute_persistence_from_simplices(simplices, max_dim=max_dim)
     return diagrams
 

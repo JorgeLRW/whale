@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "whale-tda"
-version = "0.2.0"
+version = "0.3.0"
 description = "Fast landmark-based witness persistence for point clouds and volumetric data."
 readme = "README.md"
 license = "MIT"
@@ -50,6 +50,16 @@ ai = [
   "torch>=2.0"
 ]
 
+lidar = [
+  "torch>=2.0",
+  "tqdm>=4.60"
+]
+
+mapping = [
+  "torch>=2.0",
+  "tqdm>=4.60"
+]
+
 [project.urls]
 Homepage = "https://github.com/JorgeLRW/whale"
 Documentation = "https://github.com/JorgeLRW/whale#readme"
@@ -60,6 +70,7 @@ Source = "https://github.com/JorgeLRW/whale"
 whale-deep-dive = "whale.mri.deep_dive:main"
 whale-deep-dive-fast = "whale.mri.deep_dive_fast:main"
 whale-pointcloud = "paper_ready.pointcloud_benchmark:main"
+whale-lidar-odometry = "paper_ready.train_tda_odometry:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
