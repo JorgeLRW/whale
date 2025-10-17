@@ -753,10 +753,8 @@ paper_ready/checkpoints/student/
 
 | Device | Throughput | Latency | Notes |
 |--------|------------|---------|-------|
-| RTX 4090 | 508 Hz | 2ms | Training/benchmarking |
-| RTX 3060 | 300 Hz | 3ms | Typical desktop |
-| Jetson AGX Orin | 120 Hz | 8ms | Edge deployment |
-| CPU (i9-12900K) | 30 Hz | 33ms | Fallback |
+| RTX 4090 | 508 Hz | 2ms | Training/benchmarking and evaluation (this work) |
+| CPU (i9-14900HX) | 30 Hz | 33ms | Fallback / CPU-only evaluation (this work used GPU only) |
 
 ---
 

@@ -151,6 +151,17 @@ class TDAFeatureExtractor:
         student_checkpoint: Optional[str] = "paper_ready/checkpoints/student/pointnetlite_dinov3_best.pt",  # DINOv3-trained student (-21.6% ATE, 224x speedup)
         student_device: str = "cuda",  # Device for student inference
         num_points: int = 4096,  # Number of points for student (FPS sampling)
+        # Sheaf-based temporal consistency (runtime fallback)
+    sheaf_enabled: bool = True,
+        sheaf_window: int = 5,
+        sheaf_alpha: float = 0.8,
+        sheaf_threshold: float = 0.25,
+        variance_threshold: float = 0.01,
+    snr_threshold: float = 0.0,
+    signal_threshold: float = 1.2,
+        topo_threshold: float = -1.0,
+        topo_density_threshold: float = 0.002,
+        fallback_mode: str = 'sheaf',
     ):
         """Initialize feature extractor.
         
@@ -183,13 +194,62 @@ class TDAFeatureExtractor:
         self.student_checkpoint = student_checkpoint
         self.student_device = student_device
         self.num_points = num_points
-        
+        # Sheaf / temporal consistency params
+        self.sheaf_enabled = sheaf_enabled
+        self.sheaf_window = sheaf_window
+        self.sheaf_alpha = sheaf_alpha
+        self.sheaf_threshold = sheaf_threshold
+        self.variance_threshold = variance_threshold
+        self.snr_threshold = snr_threshold
+        self.signal_threshold = signal_threshold
+        self.topo_threshold = topo_threshold
+        self.topo_density_threshold = topo_density_threshold
+        # Fallback scoring mode: 'sheaf' uses restriction-map obstruction, 'cosine' uses simple 1-cos(s_i,s_{i+1})
+        self.fallback_mode = fallback_mode
+
+        # Sliding buffer for recent student descriptors
+        from collections import deque
+        self._student_buffer = deque(maxlen=self.sheaf_window)
+        self.last_sheaf_score = 0.0
+        self.last_used_teacher = False
+        self.last_variance_score = 0.0
+        self.last_snr_score = 0.0
+        self.last_signal_strength = 0.0
+        self.last_topo_signal = 0.0
+        self.last_topo_density = 0.0
+        self.sheaf_fallback_count = 0
+
         # Lazy-load student model if needed
         self._student_model = None
         self._student_target_mean = None
         self._student_target_std = None
         if use_student:
             self._load_student_model()
+
+    def _compute_cosine_score(self, s_vec: np.ndarray) -> float:
+        """Compute a simple cosine-based obstruction between last buffer entry and current.
+
+        Returns 1 - cosine(s_prev, s_curr). If no previous entry, returns 0.0.
+        """
+        import numpy as _np
+
+        # Append new vector
+        self._student_buffer.append(_np.asarray(s_vec, dtype=_np.float32))
+
+        if len(self._student_buffer) < 2:
+            self.last_sheaf_score = 0.0
+            return 0.0
+
+        s_prev = self._student_buffer[-2]
+        s_curr = self._student_buffer[-1]
+        eps = 1e-12
+        norm_prev = _np.linalg.norm(s_prev) + eps
+        norm_curr = _np.linalg.norm(s_curr) + eps
+        cos = float(_np.dot(s_prev, s_curr) / (norm_prev * norm_curr))
+        cos = max(-1.0, min(1.0, cos))
+        obstruction = 1.0 - cos
+        self.last_sheaf_score = float(obstruction)
+        return float(obstruction)
     
     def _load_student_model(self):
         """Load student model from checkpoint."""
@@ -201,10 +261,18 @@ class TDAFeatureExtractor:
         repo_root = Path(__file__).resolve().parents[3]
         sys.path.insert(0, str(repo_root / 'paper_ready' / 'src'))
         
-        try:
-            from paper_ready.tda_odometry.student import get_student
-        except ImportError:
-            from src.paper_ready.tda_odometry.student import get_student
+        # Dynamic import to support different package layouts (src/ vs package)
+        import importlib
+        get_student = None
+        for mod_name in ('paper_ready.tda_odometry.student', 'src.paper_ready.tda_odometry.student'):
+            try:
+                mod = importlib.import_module(mod_name)
+                get_student = getattr(mod, 'get_student')
+                break
+            except Exception:
+                continue
+        if get_student is None:
+            raise ImportError('could not import get_student from expected module paths')
         
         if self.student_checkpoint is None:
             raise ValueError("use_student=True but student_checkpoint is None")
@@ -217,15 +285,16 @@ class TDAFeatureExtractor:
         
         # Create model
         self._student_model = get_student(arch, out_dim=51)
+        assert self._student_model is not None, 'get_student() returned None'
         self._student_model.load_state_dict(ckpt['model_state'])
         self._student_model.to(self.student_device)
         self._student_model.eval()
-        
+
         # Load normalization stats if present
         if 'target_mean' in ckpt:
             self._student_target_mean = torch.from_numpy(ckpt['target_mean']).to(self.student_device)
             self._student_target_std = torch.from_numpy(ckpt['target_std']).to(self.student_device)
-        
+
         print(f"Loaded student model from {self.student_checkpoint} (arch={arch})")
     
     def _fps_sample(self, points: np.ndarray, n_samples: int) -> np.ndarray:
@@ -272,6 +341,16 @@ class TDAFeatureExtractor:
         
         # Inference with GPU sync
         with torch.no_grad():
+            # Ensure student model is loaded (lazy-load if necessary)
+            if self._student_model is None:
+                try:
+                    self._load_student_model()
+                except Exception as e:
+                    raise RuntimeError(f"failed to load student model for inference: {e}") from e
+
+            if self._student_model is None:
+                raise RuntimeError("student model is not available for inference (self._student_model is None)")
+
             pred = self._student_model(pts_tensor).squeeze(0)
             
             # Unnormalize if stats available
@@ -283,6 +362,243 @@ class TDAFeatureExtractor:
                 torch.cuda.synchronize()
         
         return pred.cpu().numpy()
+
+    def _compute_sheaf_score(self, s_vec: np.ndarray) -> float:
+        """Update sliding buffer with new student descriptor and compute obstruction score.
+
+        Uses the restriction map r_{i->i+1}(s_i) = alpha * (s_i/||s_i||) + (1-alpha) * s_{i+1}
+        and the obstruction proxy 1 - cosine(r, s_{i+1}). Aggregates over the buffer window.
+        """
+        import numpy as _np
+
+        # Append new vector
+        self._student_buffer.append(_np.asarray(s_vec, dtype=_np.float32))
+
+        if len(self._student_buffer) < 2:
+            self.last_sheaf_score = 0.0
+            return 0.0
+
+        alpha = float(self.sheaf_alpha)
+        scores = []
+        eps = 1e-8
+        for i in range(len(self._student_buffer) - 1):
+            s_i = self._student_buffer[i]
+            s_j = self._student_buffer[i + 1]
+
+            # normalize both vectors to make score scale-invariant
+            norm_si = _np.linalg.norm(s_i) + eps
+            norm_sj = _np.linalg.norm(s_j) + eps
+            z_i = s_i / norm_si
+            z_j = s_j / norm_sj
+
+            r = alpha * z_i + (1.0 - alpha) * z_j
+
+            denom = (_np.linalg.norm(r) * (_np.linalg.norm(z_j) + eps)) + eps
+            cos = float(_np.dot(r, z_j) / denom)
+            cos = max(-1.0, min(1.0, cos))
+            obstruction = 1.0 - cos
+            scores.append(obstruction)
+
+        score = float(_np.mean(scores)) if scores else 0.0
+        self.last_sheaf_score = score
+        return score
+
+    def _compute_variance_score(self) -> float:
+        """Compute average stddev across vector components in the buffer.
+
+        Low variance may indicate over-smoothing (e.g., featureless scenes where the
+        student outputs collapse). We take the mean of per-dimension stddevs.
+        """
+        import numpy as _np
+
+        if len(self._student_buffer) < 2:
+            return 0.0
+
+        arr = _np.stack(list(self._student_buffer), axis=0)
+        per_dim_std = _np.std(arr, axis=0)
+        var_score = float(_np.mean(per_dim_std))
+        self.last_variance_score = var_score
+        return var_score
+
+    def _compute_snr_score(self, s_vec: np.ndarray) -> float:
+        """Robust temporal SNR proxy.
+
+        Uses the sliding buffer of recent descriptors (already populated by
+        _compute_sheaf_score) and computes:
+
+            temporal_std_per_dim = std(arr, axis=0)
+            signal = mean(temporal_std_per_dim)
+
+            diffs = abs(diff(arr, axis=0))
+            noise_per_dim = mean(diffs, axis=0)
+            noise = mean(noise_per_dim)
+
+        We return log10(snr + eps) for numeric stability and consistent thresholds.
+        """
+        import numpy as _np
+
+        eps = 1e-12
+
+        # Need at least two entries in the buffer to estimate temporal statistics
+        if len(self._student_buffer) < 2:
+            self.last_snr_score = 0.0
+            return 0.0
+
+        arr = _np.stack(list(self._student_buffer), axis=0).astype(_np.float32)  # (T, D)
+
+        # Temporal signal: mean of per-dimension stddev across time
+        per_dim_std = _np.std(arr, axis=0)
+        signal = float(_np.mean(per_dim_std))
+
+        # Temporal noise: mean absolute change between consecutive frames
+        diffs = _np.abs(_np.diff(arr, axis=0))  # (T-1, D)
+        per_dim_mean_diff = _np.mean(diffs, axis=0)
+        noise = float(_np.mean(per_dim_mean_diff))
+
+        snr_linear = signal / (noise + eps)
+        snr_log10 = float(_np.log10(snr_linear + eps))
+        self.last_snr_score = snr_log10
+        return snr_log10
+
+    def _compute_signal_strength(self, s_vec: np.ndarray) -> float:
+        """Compute log10 L2 norm of the feature vector as a signal-strength proxy.
+
+        Returns log10(norm + eps). Stored in self.last_signal_strength.
+        """
+        import numpy as _np
+
+        eps = 1e-12
+        s = _np.asarray(s_vec, dtype=_np.float32)
+        norm = float(_np.linalg.norm(s))
+        log_norm = float(_np.log10(norm + eps))
+        self.last_signal_strength = log_norm
+        return log_norm
+
+    def _compute_topo_signal(self, s_vec: np.ndarray) -> float:
+        """Estimate topological signal from predicted feature vector.
+
+        The feature vector layout (as in TDAFeatures.to_vector) places the
+        top-10 lifetimes for H0, then H1, then H2 at indices:
+            H0: 0..11 (top10 + mean/std)
+            H1: 12..23
+            H2: 24..35
+
+        We extract the H1 and H2 top-10 lifetimes, sum the top-5 from each,
+        and return log10(sum + eps) as a compact topological signal.
+        """
+        import numpy as _np
+
+        eps = 1e-12
+        vec = _np.asarray(s_vec, dtype=_np.float32)
+
+        # Indices according to to_vector() layout: each dim has 12 entries (10 top + mean + std)
+        h1_start = 12
+        h1_top10 = vec[h1_start:h1_start+10]
+        h2_start = 24
+        h2_top10 = vec[h2_start:h2_start+10]
+
+        # Ensure non-negative lifetimes
+        h1_top10 = _np.clip(h1_top10, 0.0, None)
+        h2_top10 = _np.clip(h2_top10, 0.0, None)
+
+        top_h1 = float(_np.sum(_np.sort(h1_top10)[-5:]))
+        top_h2 = float(_np.sum(_np.sort(h2_top10)[-5:]))
+
+        total = top_h1 + top_h2
+        topo_log = float(_np.log10(total + eps))
+        self.last_topo_signal = topo_log
+        return topo_log
+
+    def reset_buffer(self):
+        """Clear the sliding buffer (call at sequence boundaries)."""
+        self._student_buffer.clear()
+        self.last_sheaf_score = 0.0
+        self.last_variance_score = 0.0
+        self.last_used_teacher = False
+
+    def _extract_with_teacher(self, points: np.ndarray) -> TDAFeatures:
+        """Run the full (teacher) TDA extraction pipeline on points and return TDAFeatures.
+
+        This duplicates the non-student code path so it can be invoked as a fallback
+        at runtime when the sheaf obstruction score indicates inconsistency.
+        """
+        # Select landmarks using fast LiDAR-optimized method
+        if self.method == "lidar":
+            landmark_indices = lidar_sector_sampling(
+                points,
+                self.m,
+                n_sectors=self.n_sectors,
+                n_rings=self.n_rings,
+                seed=self.seed,
+            )
+        else:
+            # Fallback to standard methods
+            landmark_indices = select_landmarks(
+                self.method,
+                points,
+                self.m,
+                seed=self.seed,
+                selection_c=self.selection_c,
+                hybrid_alpha=self.hybrid_alpha,
+            )
+
+        landmarks = points[landmark_indices]
+
+        # Compute witness complex persistence
+        diagrams = compute_witness_persistence(
+            points,
+            landmark_indices,
+            max_dim=self.max_dim,
+            k_witness=self.k_witness,
+        )
+
+        # Extract persistence statistics per dimension
+        h0_stats = self._extract_diagram_stats(diagrams.get(0, []))
+        h1_stats = self._extract_diagram_stats(diagrams.get(1, []))
+        h2_stats = self._extract_diagram_stats(diagrams.get(2, []))
+        # Betti numbers (finite features only)
+        betti_0 = sum(1 for b, d in diagrams.get(0, []) if np.isfinite(d))
+        betti_1 = sum(1 for b, d in diagrams.get(1, []) if np.isfinite(d))
+        betti_2 = sum(1 for b, d in diagrams.get(2, []) if np.isfinite(d))
+
+        # Coverage statistics
+        cov_stats = self._compute_coverage(points, landmark_indices, self.k_witness)
+
+        # Landmark geometry
+        lm_geom = self._compute_landmark_geometry(landmarks)
+
+        # Witness statistics
+        wit_stats = self._compute_witness_stats(points, landmarks, self.k_witness)
+
+        comp_time = 0.0
+
+        return TDAFeatures(
+            h0_births=h0_stats[0],
+            h0_deaths=h0_stats[1],
+            h0_lifetimes=h0_stats[2],
+            h1_births=h1_stats[0],
+            h1_deaths=h1_stats[1],
+            h1_lifetimes=h1_stats[2],
+            h2_births=h2_stats[0],
+            h2_deaths=h2_stats[1],
+            h2_lifetimes=h2_stats[2],
+            betti_0=betti_0,
+            betti_1=betti_1,
+            betti_2=betti_2,
+            coverage_mean=cov_stats['mean'],
+            coverage_std=cov_stats['std'],
+            coverage_p95=cov_stats['p95'],
+            coverage_ratio=cov_stats['ratio'],
+            landmark_density_mean=lm_geom['density_mean'],
+            landmark_density_std=lm_geom['density_std'],
+            landmark_spacing_mean=lm_geom['spacing_mean'],
+            landmark_spacing_std=lm_geom['spacing_std'],
+            witness_knn_mean=wit_stats['mean'],
+            witness_knn_std=wit_stats['std'],
+            n_points=points.shape[0],
+            n_landmarks=self.m,
+            computation_time=comp_time,
+        )
     
     def _features_from_vector(self, vec: np.ndarray, n_points: int, comp_time: float) -> TDAFeatures:
         """Reconstruct TDAFeatures from a 51-dim feature vector (for student).
@@ -380,15 +696,99 @@ class TDAFeatureExtractor:
         """
         t0 = time.time()
         n = points.shape[0]
+        # Reset per-frame teacher flag so bookkeeping counts each frame
+        # independently. `last_used_teacher` may have been set True by a
+        # previous extraction; ensure it starts False for the current frame
+        # so increments to `sheaf_fallback_count` happen once per frame when
+        # a fallback is triggered.
+        self.last_used_teacher = False
         
         # Fast path: use student model
         if self.use_student:
             feature_vec = self._extract_with_student(points)
-            comp_time = time.time() - t0
-            
-            # Return a TDAFeatures object populated from the vector
-            # (Student predicts the to_vector() output directly, so we reconstruct)
-            return self._features_from_vector(feature_vec, n, comp_time)
+
+            # Optionally compute sheaf/cosine obstruction score and fallback to teacher
+            sheaf_score = 0.0
+            if self.sheaf_enabled:
+                try:
+                    if getattr(self, 'fallback_mode', 'sheaf') == 'cosine':
+                        sheaf_score = self._compute_cosine_score(feature_vec)
+                    else:
+                        sheaf_score = self._compute_sheaf_score(feature_vec)
+                except Exception:
+                    sheaf_score = 0.0
+
+            # Also compute variance score to detect over-smoothing
+            var_score = 0.0
+            if self.sheaf_enabled:
+                try:
+                    var_score = self._compute_variance_score()
+                except Exception:
+                    var_score = 0.0
+
+            # Compute SNR proxy (signal-to-noise) and update last_snr_score
+            snr_score = 0.0
+            if self.sheaf_enabled:
+                try:
+                    snr_score = self._compute_snr_score(feature_vec)
+                except Exception:
+                    snr_score = 0.0
+
+            # Compute signal strength (log10 norm) and update last_signal_strength
+            signal_strength = 0.0
+            try:
+                signal_strength = self._compute_signal_strength(feature_vec)
+            except Exception:
+                signal_strength = 0.0
+            # Compute topological signal (H1/H2 lifetimes)
+            topo_signal = 0.0
+            try:
+                topo_signal = self._compute_topo_signal(feature_vec)
+            except Exception:
+                topo_signal = 0.0
+
+            # Compute feature norm and decide fallback using topo-based rule.
+            # Fallback triggers when topo signal is weak, temporal sheaf
+            # obstruction is high, or the student output norm is degenerate.
+            try:
+                feat_norm = float(np.linalg.norm(feature_vec))
+            except Exception:
+                feat_norm = 0.0
+
+            # Compute topological density: topo_signal (log10 of sum lifetimes)
+            # divided by raw feature norm. Store for logging/inspection.
+            try:
+                eps = 1e-12
+                topo_density = float(topo_signal / (feat_norm + eps))
+            except Exception:
+                topo_density = 0.0
+            self.last_topo_density = topo_density
+
+            # Fallback when topological density is low (less informative per-unit-magnitude),
+            # or when sheaf obstruction is large, or when the feature norm is degenerate.
+            should_fallback = (
+                (topo_density < float(self.topo_density_threshold)) or
+                (float(sheaf_score) > float(self.sheaf_threshold)) or
+                (feat_norm < 0.5)
+            )
+
+            if should_fallback:
+                # Trigger full teacher extraction for this frame. Use the
+                # same atomic update pattern as in the teacher-only path to
+                # avoid double-counting the fallback counter if the
+                # downstream _extract_with_teacher also updates the flag.
+                if not getattr(self, 'last_used_teacher', False):
+                    self.last_used_teacher = True
+                    try:
+                        self.sheaf_fallback_count += 1
+                    except Exception:
+                        self.sheaf_fallback_count = int(getattr(self, 'sheaf_fallback_count', 0)) + 1
+                # Delegate to teacher extraction which will compute full features
+                return self._extract_with_teacher(points)
+            else:
+                self.last_used_teacher = False
+                comp_time = time.time() - t0
+                return self._features_from_vector(feature_vec, n, comp_time)
         
         # Select landmarks using fast LiDAR-optimized method
         if self.method == "lidar":
@@ -440,8 +840,8 @@ class TDAFeatureExtractor:
         wit_stats = self._compute_witness_stats(points, landmarks, self.k_witness)
         
         comp_time = time.time() - t0
-        
-        return TDAFeatures(
+        # Build feature dataclass
+        features_obj = TDAFeatures(
             h0_births=h0_stats[0],
             h0_deaths=h0_stats[1],
             h0_lifetimes=h0_stats[2],
@@ -468,6 +868,53 @@ class TDAFeatureExtractor:
             n_landmarks=self.m,
             computation_time=comp_time,
         )
+        
+        # For teacher-only extraction, also update the temporal buffer and
+        # compute sheaf/variance diagnostics so downstream logging sees values.
+        try:
+            vec = features_obj.to_vector()
+            # Use same computations as student path (this appends to buffer)
+            try:
+                self._compute_sheaf_score(vec)
+            except Exception:
+                self.last_sheaf_score = 0.0
+            try:
+                self._compute_variance_score()
+            except Exception:
+                self.last_variance_score = 0.0
+            try:
+                self._compute_snr_score(vec)
+            except Exception:
+                self.last_snr_score = 0.0
+            try:
+                self._compute_signal_strength(vec)
+            except Exception:
+                self.last_signal_strength = 0.0
+            try:
+                self._compute_topo_signal(vec)
+            except Exception:
+                self.last_topo_signal = 0.0
+            # Mark that teacher was used for this extraction and increment
+            # the aggregate fallback counter. Avoid double-counting: some
+            # caller paths (student->fallback) already set
+            # `last_used_teacher` and incremented the counter before
+            # delegating to this method, so only increment here when the
+            # flag was previously False.
+            if not getattr(self, 'last_used_teacher', False):
+                self.last_used_teacher = True
+                # ensure attribute exists and increment safely
+                try:
+                    self.sheaf_fallback_count += 1
+                except Exception:
+                    self.sheaf_fallback_count = int(getattr(self, 'sheaf_fallback_count', 0)) + 1
+            else:
+                # already marked by caller; keep as True and do not double-count
+                self.last_used_teacher = True
+        except Exception:
+            # If anything fails here, keep previous diagnostic values
+            pass
+
+        return features_obj
     
     def _extract_diagram_stats(self, diagram: List[Tuple[float, float]]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Extract births, deaths, and lifetimes from a persistence diagram."""

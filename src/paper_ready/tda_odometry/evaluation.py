@@ -6,7 +6,7 @@ Compute standard odometry metrics on KITTI sequences and compare against baselin
 import torch
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from tqdm import tqdm
 
 from .features import TDAFeatureExtractor
@@ -55,7 +55,7 @@ def quaternion_to_rotation_matrix(q: np.ndarray) -> np.ndarray:
 
 def compute_trajectory(
     relative_poses: List[Tuple[np.ndarray, np.ndarray]],
-    init_pose: np.ndarray = None,
+    init_pose: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """Accumulate relative poses into absolute trajectory.
     
@@ -161,7 +161,9 @@ def evaluate_sequence(
     data_root: Path,
     feature_extractor: TDAFeatureExtractor,
     max_points: int = 200000,
+    max_frames: Optional[int] = None,
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
+    out_dir: Optional[Path] = None,
 ) -> Dict[str, float]:
     """Evaluate model on a single KITTI sequence.
     
@@ -178,7 +180,12 @@ def evaluate_sequence(
     """
     model.eval()
     model.to(device)
-    
+    # Reset feature extractor temporal buffer at sequence start
+    try:
+        feature_extractor.reset_buffer()
+    except Exception:
+        pass
+
     # Create dataset
     dataset = KITTIOdometryDataset(
         data_root=data_root,
@@ -191,9 +198,22 @@ def evaluate_sequence(
     
     # Predict relative poses
     relative_poses_pred = []
+
+    # Prepare CSV logging if requested
+    csv_file = None
+    csv_writer = None
+    if out_dir is not None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        csv_path = out_dir / f'sheaf_scores_seq{sequence}.csv'
+        import csv
+        csv_file = open(csv_path, 'w', newline='')
+        csv_writer = csv.writer(csv_file)
+    if csv_writer is not None:
+        csv_writer.writerow(['frame', 'sheaf_score', 'variance_score', 'snr_score', 'signal_strength', 'topo_signal', 'topo_density', 'used_teacher'])
     
     with torch.no_grad():
-        for i in tqdm(range(len(dataset)), desc=f'Evaluating seq {sequence}'):
+        total = min(len(dataset), max_frames) if max_frames is not None else len(dataset)
+        for i in tqdm(range(total), desc=f'Evaluating seq {sequence}'):
             sample = dataset[i]
             
             features_t = sample['features_t'].unsqueeze(0).to(device)
@@ -205,6 +225,56 @@ def evaluate_sequence(
             rot_pred = rot_pred.cpu().numpy()[0]
             
             relative_poses_pred.append((trans_pred, rot_pred))
+
+            # Log sheaf/variance score if available
+            if csv_writer is not None:
+                # dataset extraction will have called feature_extractor.extract()
+                # so we can read last_sheaf_score / last_variance_score / last_used_teacher
+                try:
+                    sheaf_score = float(feature_extractor.last_sheaf_score)
+                except Exception:
+                    sheaf_score = 0.0
+                try:
+                    var_score = float(feature_extractor.last_variance_score)
+                except Exception:
+                    var_score = 0.0
+                try:
+                    snr_score = float(getattr(feature_extractor, 'last_snr_score', 0.0))
+                except Exception:
+                    snr_score = 0.0
+                # Prefer computing from the dataset sample if available (cached features may bypass extractor diagnostics)
+                signal_strength = 0.0
+                topo_signal = 0.0
+                topo_density = 0.0
+                try:
+                    vec_t = sample.get('features_t')
+                    if vec_t is not None:
+                        arr = vec_t.cpu().numpy().squeeze()
+                        # signal strength = log10(norm)
+                        import numpy as _np
+                        signal_strength = float(_np.log10(_np.linalg.norm(arr) + 1e-12))
+                        # topo signal: sum top-5 H1 and H2 lifetimes (indices 12:22 and 24:34)
+                        h1 = _np.clip(arr[12:22], 0.0, None)
+                        h2 = _np.clip(arr[24:34], 0.0, None)
+                        topo_signal = float(_np.log10(_np.sum(_np.sort(h1)[-5:]) + _np.sum(_np.sort(h2)[-5:]) + 1e-12))
+                        # topo density: topo_signal divided by raw norm (log-scale numerator over linear denom)
+                        feat_norm = float(_np.linalg.norm(arr) + 1e-12)
+                        topo_density = float(topo_signal / (feat_norm + 1e-12))
+                except Exception:
+                    try:
+                        signal_strength = float(getattr(feature_extractor, 'last_signal_strength', 0.0))
+                    except Exception:
+                        signal_strength = 0.0
+                    try:
+                        topo_signal = float(getattr(feature_extractor, 'last_topo_signal', 0.0))
+                    except Exception:
+                        topo_signal = 0.0
+                    try:
+                        topo_density = float(getattr(feature_extractor, 'last_topo_density', 0.0))
+                    except Exception:
+                        topo_density = 0.0
+                used = 1 if getattr(feature_extractor, 'last_used_teacher', False) else 0
+                csv_writer.writerow([i, sheaf_score, var_score, snr_score, signal_strength, topo_signal, topo_density, used])
     
     # Compute predicted trajectory
     gt_poses = dataset.poses[sequence]
@@ -214,14 +284,26 @@ def evaluate_sequence(
     # Compute metrics
     ate = compute_ate(pred_trajectory, gt_poses)
     rpe_trans, rpe_rot = compute_rpe(pred_trajectory, gt_poses, delta=1)
-    
-    return {
+
+    # Close CSV
+    if csv_file is not None:
+        csv_file.close()
+
+    metrics = {
         'ate_rmse': ate,
         'rpe_trans_rmse': rpe_trans,
         'rpe_rot_rmse': rpe_rot,
         'sequence': sequence,
-        'n_frames': len(gt_poses),
+        'n_frames': total if max_frames is not None else len(gt_poses),
     }
+
+    # Add sheaf fallback count if present
+    try:
+        metrics['sheaf_fallback_count'] = int(feature_extractor.sheaf_fallback_count)
+    except Exception:
+        metrics['sheaf_fallback_count'] = 0
+
+    return metrics
 
 
 def evaluate_all_sequences(
@@ -230,6 +312,7 @@ def evaluate_all_sequences(
     data_root: Path,
     feature_extractor: TDAFeatureExtractor,
     max_points: int = 200000,
+    max_frames: Optional[int] = None,
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
 ) -> Dict[str, Dict[str, float]]:
     """Evaluate model on multiple KITTI sequences.
@@ -249,14 +332,25 @@ def evaluate_all_sequences(
     
     for seq in sequences:
         print(f'\n=== Evaluating sequence {seq} ===')
+        import time
+        t0 = time.time()
         metrics = evaluate_sequence(
             model=model,
             sequence=seq,
             data_root=data_root,
             feature_extractor=feature_extractor,
             max_points=max_points,
+            max_frames=max_frames,
             device=device,
         )
+        elapsed = time.time() - t0
+        # Attach elapsed time and throughput (Hz)
+        try:
+            n_frames = int(metrics.get('n_frames', 0))
+        except Exception:
+            n_frames = 0
+        metrics['elapsed_sec'] = float(elapsed)
+        metrics['throughput_hz'] = float(n_frames / elapsed) if elapsed > 0 and n_frames > 0 else 0.0
         results[seq] = metrics
         
         print(f"Sequence {seq}: ATE={metrics['ate_rmse']:.3f}m, "

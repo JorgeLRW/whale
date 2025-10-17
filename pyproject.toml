@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
 authors = [
-  {name = "Jorge Ruiz Williams", email = "jorgeruizwilliams@gmail.com"}
+  {name = "Jorge L. Ruiz Williams", email = "jorgeruizwilliams@gmail.com"}
 ]
 keywords = ["topological-data-analysis", "persistent-homology", "mri", "landmarks"]
 classifiers = [
@@ -52,7 +52,8 @@ ai = [
 
 lidar = [
   "torch>=2.0",
-  "tqdm>=4.60"
+  "tqdm>=4.60",
+  "open3d>=0.17"
 ]
 
 mapping = [
